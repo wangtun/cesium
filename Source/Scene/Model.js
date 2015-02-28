@@ -1009,9 +1009,9 @@ define([
         var skinnedNodesNames = model._loadResources.skinnedNodesNames;
         var nodes = model.gltf.nodes;
 
-        for (var name in nodes) {
-            if (nodes.hasOwnProperty(name)) {
-                var node = nodes[name];
+        for (var id in nodes) {
+            if (nodes.hasOwnProperty(id)) {
+                var node = nodes[id];
 
                 var runtimeNode = {
                     // Animation targets
@@ -1029,7 +1029,9 @@ define([
                     dirtyNumber : 0,                    // The frame this node was made dirty by an animation; for graph traversal
 
                     // Rendering
-                    commands : [],                      // empty for transform, light, and camera nodes
+                    id : id,
+//                  commands : [],                      // empty for transform, light, and camera nodes
+                    commandsPerParent : {},
 
                     // Skinned node
                     inverseBindMatrices : undefined,    // undefined when node is not skinned
@@ -1047,13 +1049,13 @@ define([
                     // Publicly-accessible ModelNode instance to modify animation targets
                     publicNode : undefined
                 };
-                runtimeNode.publicNode = new ModelNode(model, node, runtimeNode, name, getTransform(node));
+                runtimeNode.publicNode = new ModelNode(model, node, runtimeNode, id, getTransform(node));
 
-                runtimeNodes[name] = runtimeNode;
+                runtimeNodes[id] = runtimeNode;
                 runtimeNodesByName[node.name] = runtimeNode;
 
                 if (defined(node.instanceSkin)) {
-                    skinnedNodesNames.push(name);
+                    skinnedNodesNames.push(id);
                     skinnedNodes.push(runtimeNode);
                 }
             }
@@ -1757,7 +1759,7 @@ define([
                 return uniformState.viewportCartesian4;
             };
         }
-        // JOINTMATRIX created in createCommands()
+        // JOINTMATRIX created in createCommand()
     };
 
     ///////////////////////////////////////////////////////////////////////////
@@ -1979,7 +1981,7 @@ define([
         };
     }
 
-    function createCommand(model, gltfNode, runtimeNode, context) {
+    function createCommand(model, gltfNode, runtimeNode, parentRuntimeNode, context) {
         var nodeCommands = model._nodeCommands;
         var pickIds = model._pickIds;
         var allowPicking = model.allowPicking;
@@ -2002,6 +2004,11 @@ define([
 
         var meshes = defined(gltfNode.meshes) ? gltfNode.meshes : gltfNode.instanceSkin.meshes;
         var meshesLength = meshes.length;
+
+// TODO: only works one level up the tree
+// TODO: parentRuntimeNode won't be defined for root!
+        var commands = [];
+        runtimeNode.commandsPerParent[defined(parentRuntimeNode) ? parentRuntimeNode.id : 'TODO-come-up-with-unique-name'] = commands;
 
         for (var j = 0; j < meshesLength; ++j) {
             var name = meshes[j];
@@ -2097,7 +2104,8 @@ define([
                     command : command,
                     pickCommand : pickCommand
                 };
-                runtimeNode.commands.push(nodeCommand);
+                commands.push(nodeCommand);
+//              runtimeNode.commands.push(nodeCommand);
                 nodeCommands.push(nodeCommand);
             }
         }
@@ -2162,7 +2170,7 @@ define([
                 }
 
                 if (defined(gltfNode.meshes) || defined(gltfNode.instanceSkin)) {
-                    createCommand(model, gltfNode, runtimeNode, context);
+                    createCommand(model, gltfNode, runtimeNode, parentRuntimeNode, context);
                 }
 
                 var children = gltfNode.children;
@@ -2246,19 +2254,29 @@ define([
         var nodeStack = scratchNodeStack;
         var computedModelMatrix = model._computedModelMatrix;
 
+// TODO: workaround to reach node from each parent
+justLoaded = true;
+
         for (var i = 0; i < length; ++i) {
             var n = rootNodes[i];
 
             getNodeMatrix(n, n.transformToRoot);
-            nodeStack.push(n);
+// TODO: avoid allocation
+            nodeStack.push({
+                node : n,
+                parent : undefined
+            });
 
             while (nodeStack.length > 0) {
-                n = nodeStack.pop();
+                var tmp = nodeStack.pop();
+                n = tmp.node;
+
                 var transformToRoot = n.transformToRoot;
-                var commands = n.commands;
+//              var commands = n.commands;
+                var commands = n.commandsPerParent[defined(tmp.parent) ? tmp.parent.id : 'TODO-come-up-with-unique-name'];
 
                 if ((n.dirtyNumber === maxDirtyNumber) || modelTransformChanged || justLoaded) {
-                    var commandsLength = commands.length;
+                    var commandsLength = defined(commands) ? commands.length : 0;
                     if (commandsLength > 0) {
                         // Node has meshes, which has primitives.  Update their commands.
                         for (var j = 0 ; j < commandsLength; ++j) {
@@ -2303,7 +2321,10 @@ define([
                         Matrix4.multiplyTransformation(transformToRoot, child.transformToRoot, child.transformToRoot);
                     }
 
-                    nodeStack.push(child);
+                    nodeStack.push({
+                        node : child,
+                        parent : n
+                    });
                 }
             }
         }
@@ -2361,7 +2382,7 @@ define([
             while (nodeStack.length > 0) {
                 n = nodeStack.pop();
                 var show = n.computedShow;
-
+// TODO: this needs to be updated to use commandsPerParent.
                 var nodeCommands = n.commands;
                 var nodeCommandsLength = nodeCommands.length;
                 for (var j = 0 ; j < nodeCommandsLength; ++j) {
