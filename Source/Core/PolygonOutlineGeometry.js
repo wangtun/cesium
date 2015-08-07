@@ -296,8 +296,8 @@ define([
         var perPositionHeight = defaultValue(options.perPositionHeight, false);
 
         var extrudedHeight = options.extrudedHeight;
-        var extrude = (defined(extrudedHeight) && (!CesiumMath.equalsEpsilon(height, extrudedHeight, CesiumMath.EPSILON6) || perPositionHeight));
-        if (extrude) {
+        var extrude = defined(extrudedHeight);
+        if (extrude && !perPositionHeight) {
             var h = extrudedHeight;
             extrudedHeight = Math.min(h, height);
             height = Math.max(h, height);
@@ -363,6 +363,7 @@ define([
      * @param {Number[]} array The packed array.
      * @param {Number} [startingIndex=0] The starting index of the element to be unpacked.
      * @param {PolygonOutlineGeometry} [result] The object into which to store the result.
+     * @returns {PolygonOutlineGeometry} The modified result parameter or a new PolygonOutlineGeometry instance if one was not provided.
      */
     PolygonOutlineGeometry.unpack = function(array, startingIndex, result) {
         //>>includeStart('debug', pragmas.debug);
