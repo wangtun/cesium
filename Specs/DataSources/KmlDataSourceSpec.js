@@ -102,7 +102,7 @@ defineSuite([
     var uberIconColor = Color.fromBytes(0xdd, 0xdd, 0xdd, 0xdd);
     var uberIconScale = 3;
     var uberIconHeading = CesiumMath.toRadians(-45);
-    var uberIconHotspot = new Cartesian2(45, -46);
+    var uberIconHotspot = new Cartesian2(45, -42);
 
     var uberLabelColor = Color.fromBytes(0xee, 0xee, 0xee, 0xee);
     var uberLabelScale = 4;
@@ -1568,7 +1568,7 @@ defineSuite([
 
         return KmlDataSource.load(parser.parseFromString(kml, "text/xml"), options).then(function(dataSource) {
             var billboard = dataSource.entities.values[0].billboard;
-            expect(billboard.pixelOffset.getValue()).toEqual(new Cartesian2(-15, -18));
+            expect(billboard.pixelOffset.getValue()).toEqual(new Cartesian2(-15, 14));
         });
     });
 
