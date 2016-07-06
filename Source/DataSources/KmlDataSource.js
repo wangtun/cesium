@@ -1082,7 +1082,7 @@ define([
 
             // If heightReference isn't NONE, then account for verticalOrigin being BOTTOM
             if (heightReference !== HeightReference.NONE) {
-                var bbPixelOffset = billboard.pixelOffset
+                var bbPixelOffset = billboard.pixelOffset;
                 if (!defined(bbPixelOffset)) {
                     bbPixelOffset = new Cartesian2(0.0, 0.0);
                 }
@@ -1090,7 +1090,7 @@ define([
                 bbPixelOffset.y += BILLBOARD_SIZE * 0.5 * scale;
                 billboard.pixelOffset = bbPixelOffset;
 
-                var labelPixelOffset = label.pixelOffset
+                var labelPixelOffset = label.pixelOffset;
                 if (!defined(labelPixelOffset)) {
                     labelPixelOffset = new Cartesian2(0.0, 0.0);
                 }

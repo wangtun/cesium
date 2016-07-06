@@ -2183,6 +2183,7 @@ defineSuite([
             var entities = dataSource.entities.values;
             expect(entities.length).toEqual(1);
             expect(entities[0].position.getValue(Iso8601.MINIMUM_VALUE)).toEqual(Cartesian3.fromDegrees(1, 2, 3));
+            expect(entities[0].billboard.pixelOffset).toBeUndefined();
             expect(entities[0].polyline).toBeUndefined();
         });
     });
@@ -2191,7 +2192,7 @@ defineSuite([
         var kml = '<?xml version="1.0" encoding="UTF-8"?>\
           <Placemark>\
             <Point>\
-              <altitudeMode>absolute</altitudeMode>\
+              <altitudeMode>relativeToGround</altitudeMode>\
               <coordinates>1,2,3</coordinates>\
             </Point>\
           </Placemark>';
@@ -2200,6 +2201,7 @@ defineSuite([
             var entities = dataSource.entities.values;
             expect(entities.length).toEqual(1);
             expect(entities[0].position.getValue(Iso8601.MINIMUM_VALUE)).toEqual(Cartesian3.fromDegrees(1, 2, 3));
+            expect(entities[0].billboard.pixelOffset.getValue()).toEqual(new Cartesian2(0, 16));
             expect(entities[0].polyline).toBeUndefined();
         });
     });
@@ -2218,6 +2220,7 @@ defineSuite([
             var entities = dataSource.entities.values;
             expect(entities.length).toEqual(1);
             expect(entities[0].position.getValue(Iso8601.MINIMUM_VALUE)).toEqual(Cartesian3.fromDegrees(1, 2));
+            expect(entities[0].billboard.pixelOffset.getValue()).toEqual(new Cartesian2(0, 16));
             expect(entities[0].polyline).toBeUndefined();
         });
     });
