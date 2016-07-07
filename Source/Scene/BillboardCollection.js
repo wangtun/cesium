@@ -790,7 +790,7 @@ define([
 
         var horizontalOrigin = billboard.horizontalOrigin;
         var heightReference = billboard._heightReference;
-        var verticalOrigin = (heightReference === HeightReference.NONE) ? billboard._verticalOrigin : VerticalOrigin.BOTTOM;
+        var verticalOrigin = (heightReference !== HeightReference.CLAMP_TO_GROUND) ? billboard._verticalOrigin : VerticalOrigin.BOTTOM;
         var show = billboard.show;
 
         // If the color alpha is zero, do not show this billboard.  This lets us avoid providing

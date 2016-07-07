@@ -243,7 +243,7 @@ define([
         glyphPixelOffset.y = 0;
 
         var heightReference = label._heightReference;
-        var verticalOrigin = (heightReference === HeightReference.NONE) ? label._verticalOrigin : VerticalOrigin.BOTTOM;
+        var verticalOrigin = (heightReference !== HeightReference.CLAMP_TO_GROUND) ? label._verticalOrigin : VerticalOrigin.BOTTOM;
         for (glyphIndex = 0; glyphIndex < glyphLength; ++glyphIndex) {
             glyph = glyphs[glyphIndex];
             dimensions = glyph.dimensions;

@@ -1080,8 +1080,8 @@ define([
             billboard.heightReference = heightReference;
             label.heightReference = heightReference;
 
-            // If heightReference isn't NONE, then account for verticalOrigin being BOTTOM
-            if (heightReference !== HeightReference.NONE) {
+            // If heightReference is CLAMP_TO_GROUND, then account for verticalOrigin being BOTTOM instead of center
+            if (heightReference === HeightReference.CLAMP_TO_GROUND) {
                 var bbPixelOffset = billboard.pixelOffset;
                 if (!defined(bbPixelOffset)) {
                     bbPixelOffset = new Cartesian2(0.0, 0.0);
