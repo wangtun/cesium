@@ -1,5 +1,7 @@
 /*global define*/
 define([
+        '../Core/AttributeCompression',
+        '../Core/Cartesian2',
         '../Core/Cartesian3',
         '../Core/Color',
         '../Core/defaultValue',
@@ -12,6 +14,7 @@ define([
         '../Core/getStringFromTypedArray',
         '../Core/joinUrls',
         '../Core/loadArrayBuffer',
+        '../Core/Matrix3',
         '../Core/Matrix4',
         '../Core/Request',
         '../Core/RequestScheduler',
@@ -24,6 +27,8 @@ define([
         './Cesium3DTileContentState',
         './ModelInstanceCollection'
     ], function(
+        AttributeCompression,
+        Cartesian2,
         Cartesian3,
         Color,
         defaultValue,
@@ -36,6 +41,7 @@ define([
         getStringFromTypedArray,
         joinUrls,
         loadArrayBuffer,
+        Matrix3,
         Matrix4,
         Request,
         RequestScheduler,
@@ -133,6 +139,7 @@ define([
 
     var sizeOfUint16 = Uint16Array.BYTES_PER_ELEMENT;
     var sizeOfUint32 = Uint32Array.BYTES_PER_ELEMENT;
+    var sizeOfFloat32 = Float32Array.BYTES_PER_ELEMENT;
     var sizeOfFloat64 = Float64Array.BYTES_PER_ELEMENT;
 
     /**
@@ -201,6 +208,22 @@ define([
         var instancesLength = view.getUint32(byteOffset, true);
         byteOffset += sizeOfUint32;
 
+        // Get translation for quantized coordinates
+        var translateX = view.getFloat64(byteOffset, true);
+        byteOffset += sizeOfFloat64;
+        var translateY = view.getFloat64(byteOffset, true);
+        byteOffset += sizeOfFloat64;
+        var translateZ = view.getFloat64(byteOffset, true);
+        byteOffset += sizeOfFloat64;
+
+        // Get scaling for quantized coordinates
+        var scaleX = view.getFloat32(byteOffset, true);
+        byteOffset += sizeOfFloat32;
+        var scaleY = view.getFloat32(byteOffset, true);
+        byteOffset += sizeOfFloat32;
+        var scaleZ = view.getFloat32(byteOffset, true);
+        byteOffset += sizeOfFloat32;
+
         //>>includeStart('debug', pragmas.debug);
         if ((gltfFormat !== 0) && (gltfFormat !== 1)) {
             throw new DeveloperError('Only glTF format 0 (uri) or 1 (embedded) are supported. Format ' + gltfFormat + ' is not');
@@ -222,7 +245,7 @@ define([
 
         // Each vertex has a longitude, latitude, and optionally batchId if there is a batch table
         // Coordinates are in double precision, batchId is a short
-        var instanceByteLength = sizeOfFloat64 * 2 + (hasBatchTable ? sizeOfUint16 : 0);
+        var instanceByteLength = sizeOfUint16 * 3 + 2 + 2 + (hasBatchTable ? sizeOfUint16 : 0);
         var instancesByteLength = instancesLength * instanceByteLength;
 
         var instancesView = new DataView(arrayBuffer, byteOffset, instancesByteLength);
@@ -249,18 +272,44 @@ define([
             collectionOptions.basePath = this._url;
         }
 
-        var ellipsoid = Ellipsoid.WGS84;
-        var position = new Cartesian3();
         var instances = collectionOptions.instances;
         byteOffset = 0;
 
+        var translation = new Cartesian3();
+        var normalUp = new Cartesian3();
+        var normalRight = new Cartesian3();
+        var normalOut = new Cartesian3();
+        var rotation = new Matrix3();
         for (var i = 0; i < instancesLength; ++i) {
-            // Get longitude and latitude
-            var longitude = instancesView.getFloat64(byteOffset, true);
-            byteOffset += sizeOfFloat64;
-            var latitude = instancesView.getFloat64(byteOffset, true);
-            byteOffset += sizeOfFloat64;
-            var height = 0.0;
+            // Get x, y, z
+            translation.x = instancesView.getUint16(byteOffset, true) * scaleX + translateX;
+            byteOffset += sizeOfUint16;
+            translation.y = instancesView.getUint16(byteOffset, true) * scaleY + translateY;
+            byteOffset += sizeOfUint16;
+            translation.z = instancesView.getUint16(byteOffset, true) * scaleZ + translateZ;
+            byteOffset += sizeOfUint16;
+
+            // Get encoded orientation vectors
+            var normalOneX = instancesView.getUint8(byteOffset);
+            byteOffset ++;
+            var normalOneY = instancesView.getUint8(byteOffset);
+            byteOffset ++;
+            var normalTwoX = instancesView.getUint8(byteOffset);
+            byteOffset ++;
+            var normalTwoY = instancesView.getUint8(byteOffset);
+            byteOffset ++;
+
+            // Decode compressed normals
+            AttributeCompression.octDecode(normalOneX, normalOneY, normalUp);
+            AttributeCompression.octDecode(normalTwoX, normalTwoY, normalRight);
+
+            // Compute third normal
+            Cartesian3.cross(normalRight, normalUp, normalOut);
+
+            // Place the basis into the rotation matrix
+            Matrix3.setColumn(rotation, 0, normalRight, rotation);
+            Matrix3.setColumn(rotation, 1, normalUp, rotation);
+            Matrix3.setColumn(rotation, 2, normalOut, rotation);
 
             // Get batch id. If there is no batch table, the batch id is the array index.
             var batchId = i;
@@ -269,9 +318,8 @@ define([
                 byteOffset += sizeOfUint16;
             }
 
-            Cartesian3.fromRadians(longitude, latitude, height, ellipsoid, position);
-            var modelMatrix = Transforms.eastNorthUpToFixedFrame(position);
-
+            // Make instance with model matrix
+            var modelMatrix = Matrix4.fromRotationTranslation(rotation, translation);
             instances[i] = {
                 modelMatrix : modelMatrix,
                 batchId : batchId

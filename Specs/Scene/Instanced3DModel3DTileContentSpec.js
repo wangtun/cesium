@@ -21,7 +21,6 @@ defineSuite([
     var centerLongitude = -1.31968;
     var centerLatitude = 0.698874;
 
-    var gltfEmbeddedUrl = './Data/Cesium3DTiles/Instanced/InstancedGltfEmbedded/';
     var gltfExternalUrl = './Data/Cesium3DTiles/Instanced/InstancedGltfExternal/';
     var withBatchTableUrl = './Data/Cesium3DTiles/Instanced/InstancedWithBatchTable/';
     var withoutBatchTableUrl = './Data/Cesium3DTiles/Instanced/InstancedWithoutBatchTable/';
@@ -106,12 +105,6 @@ defineSuite([
         }
     });
 
-    it('renders with embedded gltf', function() {
-        return Cesium3DTilesTester.loadTileset(scene, gltfEmbeddedUrl).then(function(tileset) {
-            Cesium3DTilesTester.expectRenderTileset(scene, tileset);
-        });
-    });
-
     it('renders with external gltf', function() {
         return Cesium3DTilesTester.loadTileset(scene, gltfExternalUrl).then(function(tileset) {
             Cesium3DTilesTester.expectRenderTileset(scene, tileset);
@@ -135,7 +128,7 @@ defineSuite([
         var instancedArrays = scene.context._instancedArrays;
         scene.context._instancedArrays = undefined;
 
-        return Cesium3DTilesTester.loadTileset(scene, gltfEmbeddedUrl).then(function(tileset) {
+        return Cesium3DTilesTester.loadTileset(scene, withoutBatchTableUrl).then(function(tileset) {
             Cesium3DTilesTester.expectRenderTileset(scene, tileset);
             // Re-enable extension
             scene.context._instancedArrays = instancedArrays;
@@ -143,7 +136,7 @@ defineSuite([
     });
 
     it('throws when calling getFeature with invalid index', function() {
-        return Cesium3DTilesTester.loadTileset(scene, gltfEmbeddedUrl).then(function(tileset) {
+        return Cesium3DTilesTester.loadTileset(scene, withoutBatchTableUrl).then(function(tileset) {
             var content = tileset._root.content;
             expect(function(){
                 content.getFeature(-1);
@@ -158,11 +151,11 @@ defineSuite([
     });
 
     it('destroys', function() {
-        return Cesium3DTilesTester.tileDestroys(scene, gltfEmbeddedUrl);
+        return Cesium3DTilesTester.tileDestroys(scene, withoutBatchTableUrl);
     });
 
     it('destroys before loading finishes', function() {
-        return Cesium3DTilesTester.tileDestroysBeforeLoad(scene, gltfEmbeddedUrl);
+        return Cesium3DTilesTester.tileDestroysBeforeLoad(scene, withoutBatchTableUrl);
     });
 
 }, 'WebGL');
