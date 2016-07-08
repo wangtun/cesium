@@ -139,7 +139,6 @@ define([
 
     var sizeOfUint16 = Uint16Array.BYTES_PER_ELEMENT;
     var sizeOfUint32 = Uint32Array.BYTES_PER_ELEMENT;
-    var sizeOfFloat32 = Float32Array.BYTES_PER_ELEMENT;
     var sizeOfFloat64 = Float64Array.BYTES_PER_ELEMENT;
 
     /**
@@ -199,10 +198,20 @@ define([
         var batchTableByteLength = view.getUint32(byteOffset, true);
         byteOffset += sizeOfUint32;
 
+        //>>includeStart('debug', pragmas.debug);
         var gltfByteLength = view.getUint32(byteOffset, true);
+        if (gltfByteLength === 0) {
+            throw new DeveloperError('glTF byte length is zero, i3dm must have a glTF to instance.');
+        }
+        //>>includeEnd('debug');
         byteOffset += sizeOfUint32;
-
+        
+        //>>includeStart('debug', pragmas.debug);
         var gltfFormat = view.getUint32(byteOffset, true);
+        if (gltfFormat  !== 1 && gltfFormat  !== 0) {
+            throw new DeveloperError('Only glTF format 0 (uri) or 1 (embedded) are supported. Format ' + gltfFormat + ' is not.');
+        }
+        //>>includeEnd('debug');
         byteOffset += sizeOfUint32;
 
         var instancesLength = view.getUint32(byteOffset, true);
@@ -217,12 +226,12 @@ define([
         byteOffset += sizeOfFloat64;
 
         // Get scaling for quantized coordinates
-        var scaleX = view.getFloat32(byteOffset, true);
-        byteOffset += sizeOfFloat32;
-        var scaleY = view.getFloat32(byteOffset, true);
-        byteOffset += sizeOfFloat32;
-        var scaleZ = view.getFloat32(byteOffset, true);
-        byteOffset += sizeOfFloat32;
+        var scaleX = view.getFloat64(byteOffset, true);
+        byteOffset += sizeOfFloat64;
+        var scaleY = view.getFloat64(byteOffset, true);
+        byteOffset += sizeOfFloat64;
+        var scaleZ = view.getFloat64(byteOffset, true);
+        byteOffset += sizeOfFloat64;
 
         //>>includeStart('debug', pragmas.debug);
         if ((gltfFormat !== 0) && (gltfFormat !== 1)) {
@@ -243,9 +252,11 @@ define([
         var gltfView = new Uint8Array(arrayBuffer, byteOffset, gltfByteLength);
         byteOffset += gltfByteLength;
 
-        // Each vertex has a longitude, latitude, and optionally batchId if there is a batch table
-        // Coordinates are in double precision, batchId is a short
-        var instanceByteLength = sizeOfUint16 * 3 + 2 + 2 + (hasBatchTable ? sizeOfUint16 : 0);
+        // Each vertex has:
+        // position : x, y, z in quantized coordinates : 3 * uint16
+        // normals  : 2 oct-encoded orthonormal basis vectors for orientation : 2 * (2 * uint)
+        // batchId  : optional batchId if there is a batch table present : uint16
+        var instanceByteLength = (sizeOfUint16 * 3) + (2 * 2) + (hasBatchTable ? sizeOfUint16 : 0);
         var instancesByteLength = instancesLength * instanceByteLength;
 
         var instancesView = new DataView(arrayBuffer, byteOffset, instancesByteLength);
@@ -281,7 +292,7 @@ define([
         var normalOut = new Cartesian3();
         var rotation = new Matrix3();
         for (var i = 0; i < instancesLength; ++i) {
-            // Get x, y, z
+            // Get and decode x, y, z
             translation.x = instancesView.getUint16(byteOffset, true) * scaleX + translateX;
             byteOffset += sizeOfUint16;
             translation.y = instancesView.getUint16(byteOffset, true) * scaleY + translateY;
