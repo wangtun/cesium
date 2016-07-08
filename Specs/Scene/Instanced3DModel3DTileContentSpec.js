@@ -18,8 +18,8 @@ defineSuite([
     'use strict';
 
     var scene;
-    var centerLongitude = -1.31968;
-    var centerLatitude = 0.698874;
+    var minLongitude = -1.3197004048940548;
+    var minLatitude = 0.6988585409308616;
 
     var gltfExternalUrl = './Data/Cesium3DTiles/Instanced/InstancedGltfExternal/';
     var withBatchTableUrl = './Data/Cesium3DTiles/Instanced/InstancedWithBatchTable/';
@@ -27,10 +27,9 @@ defineSuite([
 
     beforeAll(function() {
         scene = createScene();
-
-        // One instance in each data set is always located in the center, so point the camera there
-        var center = Cartesian3.fromRadians(centerLongitude, centerLatitude, 5.0);
-        scene.camera.lookAt(center, new HeadingPitchRange(0.0, -1.57, 10.0));
+        // One instance is located on the bottom corner, point the camera there
+        var bottomCorner = Cartesian3.fromRadians(minLongitude, minLatitude, 5.0);
+        scene.camera.lookAt(bottomCorner, new HeadingPitchRange(0.0, -1.57, 10.0));
     });
 
     afterAll(function() {
@@ -69,7 +68,7 @@ defineSuite([
     });
 
     it('resolves readyPromise', function() {
-        return Cesium3DTilesTester.resolvesReadyPromise(scene, gltfEmbeddedUrl);
+        return Cesium3DTilesTester.resolvesReadyPromise(scene, withoutBatchTableUrl);
     });
 
     it('rejects readyPromise on error', function() {
@@ -77,7 +76,8 @@ defineSuite([
         // Expect promise to be rejected in Model, then in ModelInstanceCollection, and
         // finally in Instanced3DModel3DTileContent.
         var arrayBuffer = Cesium3DTilesTester.generateInstancedTileBuffer({
-            gltfFormat : 0
+            gltfFormat : 0,
+            gltfUri : 'not-a-real-path'
         });
         return Cesium3DTilesTester.rejectsReadyPromiseOnError(scene, arrayBuffer, 'i3dm');
     });
@@ -88,7 +88,8 @@ defineSuite([
 
     it('loads with no instances, but does not become ready', function() {
         var arrayBuffer = Cesium3DTilesTester.generateInstancedTileBuffer({
-            featuresLength : 0
+            featuresLength : 0,
+            gltfUri : '../Data/Models/Box/CesiumBoxTest.gltf'
         });
 
         var tileset = {};
@@ -142,7 +143,7 @@ defineSuite([
                 content.getFeature(-1);
             }).toThrowDeveloperError();
             expect(function(){
-                content.getFeature(1000);
+                content.getFeature(10000);
             }).toThrowDeveloperError();
             expect(function(){
                 content.getFeature();
