@@ -291,7 +291,12 @@ define([
         var normalRight = new Cartesian3();
         var normalOut = new Cartesian3();
         var rotation = new Matrix3();
+        var scale = new Matrix4();
+        var nonUniformScale = new Cartesian3();
+        var scratchTransform = new Matrix4();
         for (var i = 0; i < instancesLength; ++i) {
+            Matrix4.IDENTITY.clone(scale);
+
             // Get and decode x, y, z
             translation.x = instancesView.getUint16(byteOffset, true) * scaleX + translateX;
             byteOffset += sizeOfUint16;
@@ -329,8 +334,24 @@ define([
                 byteOffset += sizeOfUint16;
             }
 
+            // Get scaling if present
+            var batchTable = batchTableResources.batchTable;
+            if (defined(batchTable)) {
+                var tiles3DScale = batchTable.TILES3D_SCALE;
+                if (defined(tiles3DScale)) {
+                    Matrix4.fromUniformScale(tiles3DScale[batchId], scale);
+                }
+                var tiles3DNonUniformScale = batchTable.TILES3D_NON_UNIFORM_SCALE;
+                if (defined(tiles3DNonUniformScale)) {
+                    Cartesian3.unpack(tiles3DNonUniformScale[batchId], 0, nonUniformScale);
+                    Matrix4.fromScale(nonUniformScale, scratchTransform);
+                    Matrix4.multiply(scale, scratchTransform, scale);
+                }
+            }
+
             // Make instance with model matrix
             var modelMatrix = Matrix4.fromRotationTranslation(rotation, translation);
+            Matrix4.multiply(modelMatrix, scale, modelMatrix);
             instances[i] = {
                 modelMatrix : modelMatrix,
                 batchId : batchId

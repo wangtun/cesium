@@ -22,6 +22,8 @@ defineSuite([
     var minLatitude = 0.6988585409308616;
 
     var gltfExternalUrl = './Data/Cesium3DTiles/Instanced/InstancedGltfExternal/';
+    var gltfScaleUrl = './Data/Cesium3DTiles/Instanced/InstancedGltfScale/';
+    var gltfNonUniformScaleUrl = './Data/Cesium3DTiles/Instanced/InstancedGltfNonUniformScale/';
     var withBatchTableUrl = './Data/Cesium3DTiles/Instanced/InstancedWithBatchTable/';
     var withoutBatchTableUrl = './Data/Cesium3DTiles/Instanced/InstancedWithoutBatchTable/';
 
@@ -120,6 +122,18 @@ defineSuite([
 
     it('renders without batch table', function() {
         return Cesium3DTilesTester.loadTileset(scene, withoutBatchTableUrl).then(function(tileset) {
+            Cesium3DTilesTester.expectRenderTileset(scene, tileset);
+        });
+    });
+
+    it('renders with scaling batch property', function() {
+        return Cesium3DTilesTester.loadTileset(scene, gltfScaleUrl).then(function(tileset) {
+            Cesium3DTilesTester.expectRenderTileset(scene, tileset);
+        });
+    });
+
+    it('renders with non-uniform scaling batch property', function() {
+        return Cesium3DTilesTester.loadTileset(scene, gltfNonUniformScaleUrl).then(function(tileset) {
             Cesium3DTilesTester.expectRenderTileset(scene, tileset);
         });
     });
