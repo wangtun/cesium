@@ -18,6 +18,7 @@ define([
         this.json = featureTableJSON;
         this.binaryDataView = new DataView(featureTableBinary);
         this._cachedProperties = {};
+        this.featuresLength = 0;
     }
 
     Cesium3DTileFeatureTableResources.prototype.getGlobalProperty = function(semantic, componentType, count) {
@@ -55,8 +56,8 @@ define([
         return undefined;
     };
 
-    Cesium3DTileFeatureTableResources.prototype.getProperty = function(semantic, featureId, componentType, count) {
-        var propertyArray = this.getGlobalProperty(semantic, componentType, count);
+    Cesium3DTileFeatureTableResources.prototype.getProperty = function(semantic, featureId, componentType) {
+        var propertyArray = this.getGlobalProperty(semantic, componentType, this.featuresLength);
         if (defined(propertyArray)) {
             return propertyArray[featureId];
         }
