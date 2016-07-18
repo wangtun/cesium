@@ -16,15 +16,20 @@ define([
         '../Core/loadArrayBuffer',
         '../Core/Matrix3',
         '../Core/Matrix4',
+        '../Core/Math',
+        '../Core/Quaternion',
         '../Core/Request',
         '../Core/RequestScheduler',
         '../Core/RequestType',
         '../Core/Transforms',
+        '../Core/TranslationRotationScale',
+        '../Renderer/WebGLConstants',
         '../ThirdParty/Uri',
         '../ThirdParty/when',
         './Cesium3DTileFeature',
         './Cesium3DTileBatchTableResources',
         './Cesium3DTileContentState',
+        './Cesium3DTileFeatureTableResources',
         './ModelInstanceCollection'
     ], function(
         AttributeCompression,
@@ -43,15 +48,20 @@ define([
         loadArrayBuffer,
         Matrix3,
         Matrix4,
+        CesiumMath,
+        Quaternion,
         Request,
         RequestScheduler,
         RequestType,
         Transforms,
+        TranslationRotationScale,
+        WebGLConstants,
         Uri,
         when,
         Cesium3DTileFeature,
         Cesium3DTileBatchTableResources,
         Cesium3DTileContentState,
+        Cesium3DTileFeatureTableResources,
         ModelInstanceCollection) {
     'use strict';
 
@@ -78,6 +88,7 @@ define([
         this.contentReadyToProcessPromise = when.defer();
         this.readyPromise = when.defer();
         this.batchTableResources = undefined;
+        this.featureTableResources = undefined;
         this.featurePropertiesDirty = false;
 
         this._features = undefined;
@@ -137,16 +148,13 @@ define([
         return this._features[batchId];
     };
 
-    var sizeOfUint16 = Uint16Array.BYTES_PER_ELEMENT;
     var sizeOfUint32 = Uint32Array.BYTES_PER_ELEMENT;
-    var sizeOfFloat64 = Float64Array.BYTES_PER_ELEMENT;
 
     /**
      * Part of the {@link Cesium3DTileContent} interface.
      */
     Instanced3DModel3DTileContent.prototype.request = function() {
         var that = this;
-
         var distance = this._tile.distanceToCamera;
         var promise = RequestScheduler.schedule(new Request({
             url : this._url,
@@ -195,7 +203,16 @@ define([
         // Skip byteLength
         byteOffset += sizeOfUint32;
 
-        var batchTableByteLength = view.getUint32(byteOffset, true);
+        var featureTableJSONByteLength = view.getUint32(byteOffset, true);
+        byteOffset += sizeOfUint32;
+
+        var featureTableBinaryByteLength = view.getUint32(byteOffset, true);
+        byteOffset += sizeOfUint32;
+
+        var batchTableJSONByteLength = view.getUint32(byteOffset, true);
+        byteOffset += sizeOfUint32;
+
+        var batchTableBinaryByteLength = view.getUint32(byteOffset, true);
         byteOffset += sizeOfUint32;
 
         var gltfByteLength = view.getUint32(byteOffset, true);
@@ -214,164 +231,179 @@ define([
         //>>includeEnd('debug');
         byteOffset += sizeOfUint32;
 
-        var instancesLength = view.getUint32(byteOffset, true);
-        byteOffset += sizeOfUint32;
+        if (featureTableJSONByteLength > 0) {
+            var featureTableString = getStringFromTypedArray(uint8Array, byteOffset, featureTableJSONByteLength);
+            var featureTableJSON = JSON.parse(featureTableString);
+            byteOffset += featureTableJSONByteLength;
 
-        // Get translation for quantized coordinates
-        var translateX = view.getFloat64(byteOffset, true);
-        byteOffset += sizeOfFloat64;
-        var translateY = view.getFloat64(byteOffset, true);
-        byteOffset += sizeOfFloat64;
-        var translateZ = view.getFloat64(byteOffset, true);
-        byteOffset += sizeOfFloat64;
+            var featureTableBinary = new DataView(arrayBuffer, byteOffset, featureTableBinaryByteLength);
+            byteOffset += featureTableBinaryByteLength;
 
-        // Get scaling for quantized coordinates
-        var scaleX = view.getFloat64(byteOffset, true) / 65535.0;
-        byteOffset += sizeOfFloat64;
-        var scaleY = view.getFloat64(byteOffset, true) / 65535.0;
-        byteOffset += sizeOfFloat64;
-        var scaleZ = view.getFloat64(byteOffset, true) / 65535.0;
-        byteOffset += sizeOfFloat64;
+            var featureTableResources = new Cesium3DTileFeatureTableResources(featureTableJSON, featureTableBinary);
+            this.featureTableResources = featureTableResources;
 
-        //>>includeStart('debug', pragmas.debug);
-        if ((gltfFormat !== 0) && (gltfFormat !== 1)) {
-            throw new DeveloperError('Only glTF format 0 (uri) or 1 (embedded) are supported. Format ' + gltfFormat + ' is not');
-        }
-        //>>includeEnd('debug');
+            var instancesLength = featureTableResources.getGlobalProperty('INSTANCES_LENGTH', WebGLConstants.UNSIGNED_INT);
+            //>>includeStart('debug', pragmas.debug);
+            if (!defined(instancesLength)) {
+                throw new DeveloperError('Feature table global property: INSTANCES_LENGTH must be defined');
+            }
+            //>>includeEnd('debug');
 
-        var batchTableResources = new Cesium3DTileBatchTableResources(this, instancesLength);
-        this.batchTableResources = batchTableResources;
-        var hasBatchTable = false;
-        if (batchTableByteLength > 0) {
-            hasBatchTable = true;
-            var batchTableString = getStringFromTypedArray(uint8Array, byteOffset, batchTableByteLength);
-            batchTableResources.batchTable = JSON.parse(batchTableString);
-            byteOffset += batchTableByteLength;
-        }
-
-        var gltfView = new Uint8Array(arrayBuffer, byteOffset, gltfByteLength);
-        byteOffset += gltfByteLength;
-
-        // Each instance has:
-        // position : x, y, z in quantized coordinates : 3 * uint16
-        // normals  : 2 oct-encoded orthonormal basis vectors for orientation : 2 * (2 * uint8)
-        // batchId  : optional batchId if there is a batch table present : uint16
-        var instanceByteLength = (sizeOfUint16 * 3) + (2 * 2) + (hasBatchTable ? sizeOfUint16 : 0);
-        var instancesByteLength = instancesLength * instanceByteLength;
-
-        var instancesView = new DataView(arrayBuffer, byteOffset, instancesByteLength);
-        byteOffset += instancesByteLength;
-
-        // Create model instance collection
-        var collectionOptions = {
-            instances : new Array(instancesLength),
-            batchTableResources : batchTableResources,
-            boundingVolume : this._tile.contentBoundingVolume.boundingVolume,
-            cull : false,
-            url : undefined,
-            headers : undefined,
-            type : RequestType.TILES3D,
-            gltf : undefined,
-            basePath : undefined
-        };
-
-        if (gltfFormat === 0) {
-            var gltfUrl = getStringFromTypedArray(gltfView);
-            collectionOptions.url = joinUrls(this._tileset.baseUrl, gltfUrl);
-        } else {
-            collectionOptions.gltf = gltfView;
-            collectionOptions.basePath = this._url;
-        }
-
-        var instances = collectionOptions.instances;
-        byteOffset = 0;
-
-        var translation = new Cartesian3();
-        var normalUp = new Cartesian3();
-        var normalRight = new Cartesian3();
-        var normalOut = new Cartesian3();
-        var rotation = new Matrix3();
-        var scale = new Matrix4();
-        var nonUniformScale = new Cartesian3();
-        var scratchTransform = new Matrix4();
-        for (var i = 0; i < instancesLength; ++i) {
-            Matrix4.IDENTITY.clone(scale);
-
-            // Get and decode x, y, z
-            translation.x = instancesView.getUint16(byteOffset, true) * scaleX + translateX;
-            byteOffset += sizeOfUint16;
-            translation.y = instancesView.getUint16(byteOffset, true) * scaleY + translateY;
-            byteOffset += sizeOfUint16;
-            translation.z = instancesView.getUint16(byteOffset, true) * scaleZ + translateZ;
-            byteOffset += sizeOfUint16;
-
-            // Get encoded orientation vectors
-            var normalOneX = instancesView.getUint8(byteOffset);
-            byteOffset ++;
-            var normalOneY = instancesView.getUint8(byteOffset);
-            byteOffset ++;
-            var normalTwoX = instancesView.getUint8(byteOffset);
-            byteOffset ++;
-            var normalTwoY = instancesView.getUint8(byteOffset);
-            byteOffset ++;
-
-            // Decode compressed normals
-            AttributeCompression.octDecode(normalOneX, normalOneY, normalUp);
-            AttributeCompression.octDecode(normalTwoX, normalTwoY, normalRight);
-
-            // Compute third normal
-            Cartesian3.cross(normalRight, normalUp, normalOut);
-
-            // Place the basis into the rotation matrix
-            Matrix3.setColumn(rotation, 0, normalRight, rotation);
-            Matrix3.setColumn(rotation, 1, normalUp, rotation);
-            Matrix3.setColumn(rotation, 2, normalOut, rotation);
-
-            // Get batch id. If there is no batch table, the batch id is the array index.
-            var batchId = i;
-            if (hasBatchTable) {
-                batchId = instancesView.getUint16(byteOffset, true);
-                byteOffset += sizeOfUint16;
+            var batchTableResources = new Cesium3DTileBatchTableResources(this, instancesLength);
+            this.batchTableResources = batchTableResources;
+            if (batchTableJSONByteLength > 0) {
+                var batchTableString = getStringFromTypedArray(uint8Array, byteOffset, batchTableJSONByteLength);
+                batchTableResources.batchTable = JSON.parse(batchTableString);
+                byteOffset += batchTableJSONByteLength;
             }
 
-            // Get scaling if present
-            var batchTable = batchTableResources.batchTable;
-            if (defined(batchTable)) {
-                var tiles3DScale = batchTable.TILES3D_SCALE;
-                if (defined(tiles3DScale)) {
-                    Matrix4.fromUniformScale(tiles3DScale[batchId], scale);
-                }
-                var tiles3DNonUniformScale = batchTable.TILES3D_NON_UNIFORM_SCALE;
-                if (defined(tiles3DNonUniformScale)) {
-                    Cartesian3.unpack(tiles3DNonUniformScale[batchId], 0, nonUniformScale);
-                    Matrix4.fromScale(nonUniformScale, scratchTransform);
-                    Matrix4.multiply(scale, scratchTransform, scale);
-                }
-            }
+            // TODO: Right now batchTableResources doesn't support binary
+            byteOffset += batchTableBinaryByteLength;
 
-            // Make instance with model matrix
-            var modelMatrix = Matrix4.fromRotationTranslation(rotation, translation);
-            Matrix4.multiply(modelMatrix, scale, modelMatrix);
-            instances[i] = {
-                modelMatrix : modelMatrix,
-                batchId : batchId
+            var gltfView = new Uint8Array(arrayBuffer, byteOffset, gltfByteLength);
+            byteOffset += gltfByteLength;
+
+            // Create model instance collection
+            var collectionOptions = {
+                instances : new Array(instancesLength),
+                batchTableResources : batchTableResources,
+                boundingVolume : this._tile.contentBoundingVolume.boundingVolume,
+                cull : false,
+                url : undefined,
+                headers : undefined,
+                type : RequestType.TILES3D,
+                gltf : undefined,
+                basePath : undefined
             };
+
+            if (gltfFormat === 0) {
+                var gltfUrl = getStringFromTypedArray(gltfView);
+                collectionOptions.url = joinUrls(this._tileset.baseUrl, gltfUrl);
+            } else {
+                collectionOptions.gltf = gltfView;
+                collectionOptions.basePath = this._url;
+            }
+
+            var instances = collectionOptions.instances;
+            var instancePosition = new Cartesian3();
+            var instanceNormalRight = new Cartesian3();
+            var instanceNormalUp = new Cartesian3();
+            var instanceNormalForward = new Cartesian3();
+            var instanceRotation = new Matrix3();
+            var instanceNonUniformScale = new Cartesian3();
+            var instanceScale = new Matrix3();
+            var instanceTranslationRotationScale = new TranslationRotationScale();
+            var instanceTransform = new Matrix4();
+            for (var i = 0; i < instancesLength; i++) {
+                // Get the instance position
+                var position = featureTableResources.getProperty('POSITION', i, WebGLConstants.FLOAT, 3);
+                if (!defined(position)) {
+                    var positionQuantized = featureTableResources.getProperty('POSITION_QUANTIZED', i, WebGLConstants.UNSIGNED_SHORT, 3);
+                    //>>includeStart('debug', pragmas.debug);
+                    if (!defined(positionQuantized)) {
+                        throw new DeveloperError('Either POSITION or POSITION_QUANTIZED must be defined for each instance.');
+                    }
+                    //>>includeEnd('debug');
+                    var quantizedVolumeOffset = featureTableResources.getGlobalProperty('QUANTIZED_VOLUME_OFFSET', WebGLConstants.FLOAT, 3);
+                    if (!defined(quantizedVolumeOffset)) {
+                        throw new DeveloperError('Global property: QUANTIZED_VOLUME_OFFSET must be defined for quantized positions.');
+                    }
+                    var quantizedVolumeScale = featureTableResources.getGlobalProperty('QUANTIZED_VOLUME_SCALE', WebGLConstants.FLOAT, 3);
+                    if (!defined(quantizedVolumeScale)) {
+                        throw new DeveloperError('Global property: QUANTIZED_VOLUME_SCALE must be defined for quantized positions.');
+                    }
+                    for (var j = 0; j < 3; j++) {
+                        position[j] = positionQuantized[j] / 65535.0 * quantizedVolumeScale[j] + quantizedVolumeOffset[j];
+                    }
+                }
+                Cartesian3.unpack(position, 0, instancePosition);
+                instanceTranslationRotationScale.translation = instancePosition;
+
+                // Get the instance rotation
+                var normalUp = featureTableResources.getProperty('NORMAL_UP', i, WebGLConstants.FLOAT, 3);
+                var normalRight = featureTableResources.getProperty('NORMAL_RIGHT', i, WebGLConstants.FLOAT, 3);
+                var hasCustomOrientation = false;
+                if (defined(normalUp)) {
+                    //>>includeStart('debug', pragmas.debug);
+                    if (!defined(normalRight)) {
+                        throw new DeveloperError('To define a custom orientation, both NORMAL_UP and NORMAL_RIGHT must be defined.');
+                    }
+                    //>>includeEnd('debug');
+                    Cartesian3.unpack(normalUp, 0, instanceNormalUp);
+                    Cartesian3.unpack(normalRight, 0, instanceNormalRight);
+                    hasCustomOrientation = true;
+                } else {
+                    var octNormalUp = featureTableResources.getProperty('NORMAL_UP_OCT32P', WebGLConstants.UNSIGNED_SHORT, 2);
+                    var octNormalRight = featureTableResources.getProperty('NORMAL_RIGHT_OCT32P', WebGLConstants.UNSIGNED_SHORT, 2);
+                    if (defined(octNormalUp)) {
+                        //>>includeStart('debug', pragmas.debug);
+                        if (!defined(octNormalRight)) {
+                            throw new DeveloperError('To define a custom orientation with oct-encoded vectors, both NORMAL_UP_OCT32P and NORMAL_RIGHT_OCT32P must be defined.');
+                        }
+                        //>>includeEnd('debug');
+                        // TODO: This currently targets OCT16P encoding, it's just here for show until my Cesium PR for other precisions gets pulled in
+                        AttributeCompression.octDecode(octNormalUp[0], octNormalUp[1], instanceNormalUp);
+                        AttributeCompression.octDecode(octNormalRight[0], octNormalRight[1], instanceNormalRight);
+                        hasCustomOrientation = true;
+                    } else {
+                        // Custom orientation is not defined, default to WGS84
+                        Transforms.eastNorthUpToFixedFrame(instancePosition, Ellipsoid.WGS84, instanceTransform);
+                        Matrix4.getRotation(instanceTransform, instanceRotation);
+                    }
+                }
+                if (hasCustomOrientation) {
+                    Cartesian3.cross(instanceNormalRight, instanceNormalUp, instanceNormalForward);
+                    Cartesian3.normalize(instanceNormalForward, instanceNormalForward);
+                    Matrix3.setColumn(instanceRotation, 0, instanceNormalRight, instanceRotation);
+                    Matrix3.setColumn(instanceRotation, 1, instanceNormalUp, instanceRotation);
+                    Matrix3.setColumn(instanceRotation, 2, instanceNormalForward, instanceRotation);
+                }
+                instanceTranslationRotationScale.rotation = instanceRotation;
+
+                // Get the instance scale
+                Matrix3.clone(Matrix3.IDENTITY, instanceScale);
+                var scale = featureTableResources.getProperty('SCALE', i, WebGLConstants.FLOAT);
+                if (defined(scale)) {
+                    Matrix3.multiplyByScalar(instanceScale, scale, instanceScale);
+                }
+                var nonUniformScale = featureTableResources.getProperty('NON_UNIFORM_SCALE', i, WebGLConstants.FLOAT);
+                if (defined(nonUniformScale)) {
+                    Cartesian3.unpack(nonUniformScale, 0, instanceNonUniformScale);
+                    Matrix3.multiplyByVector(instanceScale, nonUniformScale, instanceScale);
+                }
+                instanceTranslationRotationScale.scale = instanceScale;
+
+                // Get the batchId
+                var batchId = featureTableResources.getProperty('BATCH_ID', i , WebGLConstants.UNSIGNED_SHORT);
+                if (!defined(batchId)) {
+                    // If BATCH_ID semantic is undefined, batchId is just the instance number
+                    batchId = i;
+                }
+
+                // Create the model matrix and the instance
+                Matrix4.fromTranslationRotationScale(instanceTranslationRotationScale, instanceTransform);
+                var modelMatrix = instanceTransform.clone();
+                instances[i] = {
+                    modelMatrix : modelMatrix,
+                    batchId : batchId
+                };
+            }
+
+            var modelInstanceCollection = new ModelInstanceCollection(collectionOptions);
+            this._modelInstanceCollection = modelInstanceCollection;
+            this.state = Cesium3DTileContentState.PROCESSING;
+            this.contentReadyToProcessPromise.resolve(this);
+
+            var that = this;
+
+            when(modelInstanceCollection.readyPromise).then(function(modelInstanceCollection) {
+                that.state = Cesium3DTileContentState.READY;
+                that.readyPromise.resolve(that);
+            }).otherwise(function(error) {
+                that.state = Cesium3DTileContentState.FAILED;
+                that.readyPromise.reject(error);
+            });
         }
-
-        var modelInstanceCollection = new ModelInstanceCollection(collectionOptions);
-        this._modelInstanceCollection = modelInstanceCollection;
-        this.state = Cesium3DTileContentState.PROCESSING;
-        this.contentReadyToProcessPromise.resolve(this);
-
-        var that = this;
-
-        when(modelInstanceCollection.readyPromise).then(function(modelInstanceCollection) {
-            that.state = Cesium3DTileContentState.READY;
-            that.readyPromise.resolve(that);
-        }).otherwise(function(error) {
-            that.state = Cesium3DTileContentState.FAILED;
-            that.readyPromise.reject(error);
-        });
     };
 
     /**
