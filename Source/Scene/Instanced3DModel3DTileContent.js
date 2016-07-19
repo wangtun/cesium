@@ -88,7 +88,6 @@ define([
         this.contentReadyToProcessPromise = when.defer();
         this.readyPromise = when.defer();
         this.batchTableResources = undefined;
-        this.featureTableResources = undefined;
         this.featurePropertiesDirty = false;
 
         this._features = undefined;
@@ -225,7 +224,7 @@ define([
         
         var gltfFormat = view.getUint32(byteOffset, true);
         //>>includeStart('debug', pragmas.debug);
-        if (gltfFormat  !== 1 && gltfFormat  !== 0) {
+        if (gltfFormat !== 1 && gltfFormat !== 0) {
             throw new DeveloperError('Only glTF format 0 (uri) or 1 (embedded) are supported. Format ' + gltfFormat + ' is not.');
         }
         //>>includeEnd('debug');
@@ -240,9 +239,9 @@ define([
             byteOffset += featureTableBinaryByteLength;
 
             var featureTableResources = new Cesium3DTileFeatureTableResources(featureTableJSON, featureTableBinary);
-            this.featureTableResources = featureTableResources;
-
             var instancesLength = featureTableResources.getGlobalProperty('INSTANCES_LENGTH', WebGLConstants.UNSIGNED_INT);
+            featureTableResources.featuresLength = instancesLength;
+
             //>>includeStart('debug', pragmas.debug);
             if (!defined(instancesLength)) {
                 throw new DeveloperError('Feature table global property: INSTANCES_LENGTH must be defined');
@@ -296,9 +295,9 @@ define([
             var instanceTransform = new Matrix4();
             for (var i = 0; i < instancesLength; i++) {
                 // Get the instance position
-                var position = featureTableResources.getProperty('POSITION', i, WebGLConstants.FLOAT, 3);
+                var position = featureTableResources.getProperty('POSITION', i, WebGLConstants.FLOAT);
                 if (!defined(position)) {
-                    var positionQuantized = featureTableResources.getProperty('POSITION_QUANTIZED', i, WebGLConstants.UNSIGNED_SHORT, 3);
+                    var positionQuantized = featureTableResources.getProperty('POSITION_QUANTIZED', i, WebGLConstants.UNSIGNED_SHORT);
                     //>>includeStart('debug', pragmas.debug);
                     if (!defined(positionQuantized)) {
                         throw new DeveloperError('Either POSITION or POSITION_QUANTIZED must be defined for each instance.');
@@ -320,8 +319,8 @@ define([
                 instanceTranslationRotationScale.translation = instancePosition;
 
                 // Get the instance rotation
-                var normalUp = featureTableResources.getProperty('NORMAL_UP', i, WebGLConstants.FLOAT, 3);
-                var normalRight = featureTableResources.getProperty('NORMAL_RIGHT', i, WebGLConstants.FLOAT, 3);
+                var normalUp = featureTableResources.getProperty('NORMAL_UP', i, WebGLConstants.FLOAT);
+                var normalRight = featureTableResources.getProperty('NORMAL_RIGHT', i, WebGLConstants.FLOAT);
                 var hasCustomOrientation = false;
                 if (defined(normalUp)) {
                     //>>includeStart('debug', pragmas.debug);
@@ -333,8 +332,8 @@ define([
                     Cartesian3.unpack(normalRight, 0, instanceNormalRight);
                     hasCustomOrientation = true;
                 } else {
-                    var octNormalUp = featureTableResources.getProperty('NORMAL_UP_OCT32P', WebGLConstants.UNSIGNED_SHORT, 2);
-                    var octNormalRight = featureTableResources.getProperty('NORMAL_RIGHT_OCT32P', WebGLConstants.UNSIGNED_SHORT, 2);
+                    var octNormalUp = featureTableResources.getProperty('NORMAL_UP_OCT32P', WebGLConstants.UNSIGNED_SHORT);
+                    var octNormalRight = featureTableResources.getProperty('NORMAL_RIGHT_OCT32P', WebGLConstants.UNSIGNED_SHORT);
                     if (defined(octNormalUp)) {
                         //>>includeStart('debug', pragmas.debug);
                         if (!defined(octNormalRight)) {
