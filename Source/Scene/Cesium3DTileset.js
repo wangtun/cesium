@@ -71,6 +71,7 @@ define([
      * @param {Boolean} [options.debugColorizeTiles=false] For debugging only. When true, assigns a random color to each tile.
      * @param {Boolean} [options.debugShowBoundingVolume=false] For debugging only. When true, renders the bounding volume for each tile.
      * @param {Boolean} [options.debugShowContentBoundingVolume=false] For debugging only. When true, renders the bounding volume for each tile's content.
+     * @param {Boolean} [options.debugShowViewerRequestVolume=false] For debugging only. When true, renders the viewer request volume for each tile.
      *
      * @example
      * var tileset = scene.primitives.add(new Cesium.Cesium3DTileset({
@@ -233,6 +234,17 @@ define([
          * @default false
          */
         this.debugShowContentBoundingVolume = defaultValue(options.debugShowContentBoundingVolume, false);
+
+        /**
+         * This property is for debugging only; it is not optimized for production use.
+         * <p>
+         * When true, renders the viewer request volume for each tile.
+         * </p>
+         *
+         * @type {Boolean}
+         * @default false
+         */
+        this.debugShowViewerRequestVolume = defaultValue(options.debugShowViewerRequestVolume, false);
 
         /**
          * The event fired to indicate progress of loading new tiles.  This event is fired when a new tile
@@ -876,6 +888,10 @@ define([
             return;
         }
 
+        if (!root.insideViewerRequestVolume(frameState)) {
+            return;
+        }
+
         if (root.contentUnloaded) {
             requestContent(tileset, root, outOfCore);
             return;
@@ -959,12 +975,14 @@ define([
 
                             // Use parent's geometric error with child's box to see if we already meet the SSE
                             if (getScreenSpaceError(t.geometricError, child, frameState) > maximumScreenSpaceError) {
-                                if (child.contentUnloaded) {
-                                    if (child.visibility(cullingVolume) !== CullingVolume.MASK_OUTSIDE) {
-                                        requestContent(tileset, child, outOfCore);
+                                if (child.insideViewerRequestVolume(frameState)) {
+                                    if (child.contentUnloaded) {
+                                        if (child.visibility(cullingVolume) !== CullingVolume.MASK_OUTSIDE) {
+                                            requestContent(tileset, child, outOfCore);
+                                        }
+                                    } else {
+                                        stack.push(child);
                                     }
-                                } else {
-                                    stack.push(child);
                                 }
                             }
                         }
@@ -1007,13 +1025,15 @@ define([
                             for (k = 0; (k < childrenLength) && t.canRequestContent(); ++k) {
                                 child = children[k];
                                 // PERFORMANCE_IDEA: we could spin a bit less CPU here by keeping separate lists for unloaded/ready children.
-                                if (child.contentUnloaded) {
-                                    requestContent(tileset, child, outOfCore);
-                                } else {
-                                    // Touch loaded child even though it is not selected this frame since
-                                    // we want to keep it in the cache for when all children are loaded
-                                    // and this tile can refine to them.
-                                    touch(tileset, child);
+                                if (child.insideViewerRequestVolume(frameState)) {
+                                    if (child.contentUnloaded) {
+                                        requestContent(tileset, child, outOfCore);
+                                    } else {
+                                        // Touch loaded child even though it is not selected this frame since
+                                        // we want to keep it in the cache for when all children are loaded
+                                        // and this tile can refine to them.
+                                        touch(tileset, child);
+                                    }
                                 }
                             }
                         }

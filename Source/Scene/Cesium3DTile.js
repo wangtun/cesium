@@ -110,6 +110,12 @@ define([
         }
         this._contentBoundingVolume = contentBoundingVolume;
 
+        var viewerRequestVolume;
+        if (defined(header.viewerRequestVolume)) {
+            viewerRequestVolume = this.createBoundingVolume(header.viewerRequestVolume, this.computedTransform);
+        }
+        this._viewerRequestVolume = viewerRequestVolume;
+
         /**
          * The error, in meters, introduced if this tile is rendered and its children are not.
          * This is used to compute Screen-Space Error (SSE), i.e., the error measured in pixels.
@@ -311,6 +317,7 @@ define([
 
         this._debugBoundingVolume = undefined;
         this._debugContentBoundingVolume = undefined;
+        this._debugViewerRequestVolume = undefined;
         this._debugColor = new Color.fromRandom({ alpha : 1.0 });
         this._debugColorizeTiles = false;
     }
@@ -469,6 +476,7 @@ define([
 
         this._debugBoundingVolume = this._debugBoundingVolume && this._debugBoundingVolume.destroy();
         this._debugContentBoundingVolume = this._debugContentBoundingVolume && this._debugContentBoundingVolume.destroy();
+        this._debugViewerRequestVolume = this._debugViewerRequestVolume && this._debugViewerRequestVolume.destroy();
     };
 
     /**
@@ -512,6 +520,21 @@ define([
      */
     Cesium3DTile.prototype.distanceToTile = function(frameState) {
         return this._boundingVolume.distanceToCamera(frameState);
+    };
+
+    /**
+     * Checks if the camera is inside the viewer request volume.
+     *
+     * @param {FrameState} frameState The frame state.
+     * @returns {Boolean} Whether the camera is inside the volume.
+     */
+    Cesium3DTile.prototype.insideViewerRequestVolume = function(frameState) {
+        var viewerRequestVolume = this._viewerRequestVolume;
+        if (!defined(viewerRequestVolume)) {
+            return true;
+        }
+
+        return (viewerRequestVolume.distanceToCamera(frameState) === 0.0);
     };
 
     var scratchMatrix = new Matrix3();
@@ -603,6 +626,15 @@ define([
             tile._debugContentBoundingVolume = tile._debugContentBoundingVolume.destroy();
         }
 
+        if (tileset.debugShowViewerRequestVolume && defined(tile._viewerRequestVolume)) {
+            if (!defined(tile._debugViewerRequestVolume)) {
+                tile._debugViewerRequestVolume = tile._viewerRequestVolume.createDebugVolume(Color.GREEN);
+            }
+            tile._debugViewerRequestVolume.update(frameState);
+        } else if (!tileset.debugShowViewerRequestVolume && defined(tile._debugViewerRequestVolume)) {
+            tile._debugViewerRequestVolume = tile._debugViewerRequestVolume.destroy();
+        }
+
         if (tileset.debugColorizeTiles && !tile._debugColorizeTiles) {
             tile._debugColorizeTiles = true;
             tile._content.applyDebugSettings(true, tile._debugColor);
@@ -624,10 +656,14 @@ define([
             if (defined(tile._contentBoundingVolume)) {
                 tile._contentBoundingVolume = tile.createBoundingVolume(content.boundingVolume, tile.computedTransform, tile._contentBoundingVolume);
             }
+            if (defined(tile._viewerRequestVolume)) {
+                tile._viewerRequestVolume = tile.createBoundingVolume(header.viewerRequestVolume, tile.computedTransform, tile._viewerRequestVolume);
+            }
 
             // Destroy the debug bounding volumes. They will be generated fresh.
             tile._debugBoundingVolume = tile._debugBoundingVolume && tile._debugBoundingVolume.destroy();
             tile._debugContentBoundingVolume = tile._debugContentBoundingVolume && tile._debugContentBoundingVolume.destroy();
+            tile._debugViewerRequestVolume = tile._debugViewerRequestVolume && tile._debugViewerRequestVolume.destroy();
         }
     }
 
@@ -676,6 +712,7 @@ define([
         this._content = this._content && this._content.destroy();
         this._debugBoundingVolume = this._debugBoundingVolume && this._debugBoundingVolume.destroy();
         this._debugContentBoundingVolume = this._debugContentBoundingVolume && this._debugContentBoundingVolume.destroy();
+        this._debugViewerRequestVolume = this._debugViewerRequestVolume && this._debugViewerRequestVolume.destroy();
         return destroyObject(this);
     };
 
