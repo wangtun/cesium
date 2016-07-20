@@ -235,7 +235,7 @@ define([
             var featureTableJSON = JSON.parse(featureTableString);
             byteOffset += featureTableJSONByteLength;
 
-            var featureTableBinary = new DataView(arrayBuffer, byteOffset, featureTableBinaryByteLength);
+            var featureTableBinary = new Uint8Array(arrayBuffer, byteOffset, featureTableBinaryByteLength);
             byteOffset += featureTableBinaryByteLength;
 
             var featureTableResources = new Cesium3DTileFeatureTableResources(featureTableJSON, featureTableBinary);
@@ -289,13 +289,13 @@ define([
             var instanceNormalUp = new Cartesian3();
             var instanceNormalForward = new Cartesian3();
             var instanceRotation = new Matrix3();
-            var instanceNonUniformScale = new Cartesian3();
-            var instanceScale = new Matrix3();
+            var instanceQuaternion = new Quaternion();
+            var instanceScale = new Cartesian3();
             var instanceTranslationRotationScale = new TranslationRotationScale();
             var instanceTransform = new Matrix4();
             for (var i = 0; i < instancesLength; i++) {
                 // Get the instance position
-                var position = featureTableResources.getProperty('POSITION', i, WebGLConstants.FLOAT);
+                var position = featureTableResources.getProperty('POSITION', i, WebGLConstants.FLOAT, 3);
                 if (!defined(position)) {
                     var positionQuantized = featureTableResources.getProperty('POSITION_QUANTIZED', i, WebGLConstants.UNSIGNED_SHORT);
                     //>>includeStart('debug', pragmas.debug);
@@ -319,8 +319,8 @@ define([
                 instanceTranslationRotationScale.translation = instancePosition;
 
                 // Get the instance rotation
-                var normalUp = featureTableResources.getProperty('NORMAL_UP', i, WebGLConstants.FLOAT);
-                var normalRight = featureTableResources.getProperty('NORMAL_RIGHT', i, WebGLConstants.FLOAT);
+                var normalUp = featureTableResources.getProperty('NORMAL_UP', i, WebGLConstants.FLOAT, 3);
+                var normalRight = featureTableResources.getProperty('NORMAL_RIGHT', i, WebGLConstants.FLOAT, 3);
                 var hasCustomOrientation = false;
                 if (defined(normalUp)) {
                     //>>includeStart('debug', pragmas.debug);
@@ -332,8 +332,8 @@ define([
                     Cartesian3.unpack(normalRight, 0, instanceNormalRight);
                     hasCustomOrientation = true;
                 } else {
-                    var octNormalUp = featureTableResources.getProperty('NORMAL_UP_OCT32P', WebGLConstants.UNSIGNED_SHORT);
-                    var octNormalRight = featureTableResources.getProperty('NORMAL_RIGHT_OCT32P', WebGLConstants.UNSIGNED_SHORT);
+                    var octNormalUp = featureTableResources.getProperty('NORMAL_UP_OCT32P', WebGLConstants.UNSIGNED_SHORT, 2);
+                    var octNormalRight = featureTableResources.getProperty('NORMAL_RIGHT_OCT32P', WebGLConstants.UNSIGNED_SHORT, 2);
                     if (defined(octNormalUp)) {
                         //>>includeStart('debug', pragmas.debug);
                         if (!defined(octNormalRight)) {
@@ -357,18 +357,22 @@ define([
                     Matrix3.setColumn(instanceRotation, 1, instanceNormalUp, instanceRotation);
                     Matrix3.setColumn(instanceRotation, 2, instanceNormalForward, instanceRotation);
                 }
-                instanceTranslationRotationScale.rotation = instanceRotation;
+                Quaternion.fromRotationMatrix(instanceRotation, instanceQuaternion);
+                instanceTranslationRotationScale.rotation = instanceQuaternion;
 
                 // Get the instance scale
-                Matrix3.clone(Matrix3.IDENTITY, instanceScale);
+                instanceScale.x = 1.0;
+                instanceScale.y = 1.0;
+                instanceScale.z = 1.0;
                 var scale = featureTableResources.getProperty('SCALE', i, WebGLConstants.FLOAT);
                 if (defined(scale)) {
-                    Matrix3.multiplyByScalar(instanceScale, scale, instanceScale);
+                    Cartesian3.multiplyByScalar(instanceScale, scale, instanceScale);
                 }
-                var nonUniformScale = featureTableResources.getProperty('NON_UNIFORM_SCALE', i, WebGLConstants.FLOAT);
+                var nonUniformScale = featureTableResources.getProperty('SCALE_NON_UNIFORM', i, WebGLConstants.FLOAT, 3);
                 if (defined(nonUniformScale)) {
-                    Cartesian3.unpack(nonUniformScale, 0, instanceNonUniformScale);
-                    Matrix3.multiplyByVector(instanceScale, nonUniformScale, instanceScale);
+                    instanceScale.x *= nonUniformScale[0];
+                    instanceScale.y *= nonUniformScale[1];
+                    instanceScale.z *= nonUniformScale[2];
                 }
                 instanceTranslationRotationScale.scale = instanceScale;
 
