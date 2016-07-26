@@ -22,10 +22,14 @@ defineSuite([
     var minLatitude = 0.6988585409308616;
 
     var gltfExternalUrl = './Data/Cesium3DTiles/Instanced/InstancedGltfExternal/';
-    var gltfScaleUrl = './Data/Cesium3DTiles/Instanced/InstancedGltfScale/';
-    var gltfNonUniformScaleUrl = './Data/Cesium3DTiles/Instanced/InstancedGltfNonUniformScale/';
     var withBatchTableUrl = './Data/Cesium3DTiles/Instanced/InstancedWithBatchTable/';
     var withoutBatchTableUrl = './Data/Cesium3DTiles/Instanced/InstancedWithoutBatchTable/';
+    var orientationUrl = './Data/Cesium3DTiles/Instanced/InstancedOrientationWithBatchTable/';
+    var oct16POrientationUrl = './Data/Cesium3DTiles/Instanced/InstancedOct16POrientationWithBatchTable/';
+    var scaleUrl = './Data/Cesium3DTiles/Instanced/InstancedScaleWithBatchTable/';
+    var scaleNonUniformUrl = './Data/Cesium3DTiles/Instanced/InstancedScaleNonUniformWithBatchTable/';
+    var quantizedUrl = './Data/Cesium3DTiles/Instanced/InstancedQuantizedWithBatchTable/';
+    var quantizedOct16POrientationUrl = './Data/Cesium3DTiles/Instanced/InstancedQuantizedOct16POrientationWithBatchTable/';
 
     beforeAll(function() {
         scene = createScene();
@@ -126,14 +130,38 @@ defineSuite([
         });
     });
 
-    it('renders with scaling batch property', function() {
-        return Cesium3DTilesTester.loadTileset(scene, gltfScaleUrl).then(function(tileset) {
+    it('renders with feature defined orientation', function() {
+        return Cesium3DTilesTester.loadTileset(scene, orientationUrl).then(function(tileset) {
             Cesium3DTilesTester.expectRenderTileset(scene, tileset);
         });
     });
 
-    it('renders with non-uniform scaling batch property', function() {
-        return Cesium3DTilesTester.loadTileset(scene, gltfNonUniformScaleUrl).then(function(tileset) {
+    it('renders with feature defined Oct16P encoded orientation', function() {
+        return Cesium3DTilesTester.loadTileset(scene, oct16POrientationUrl).then(function(tileset) {
+            Cesium3DTilesTester.expectRenderTileset(scene, tileset);
+        });
+    });
+
+    it('renders with feature defined scale', function() {
+        return Cesium3DTilesTester.loadTileset(scene, scaleUrl).then(function(tileset) {
+            Cesium3DTilesTester.expectRenderTileset(scene, tileset);
+        });
+    });
+
+    it('renders with feature defined non-uniform scale', function() {
+        return Cesium3DTilesTester.loadTileset(scene, scaleNonUniformUrl).then(function(tileset) {
+            Cesium3DTilesTester.expectRenderTileset(scene, tileset);
+        });
+    });
+
+    it('renders with feature defined quantized position', function() {
+        return Cesium3DTilesTester.loadTileset(scene, quantizedUrl).then(function(tileset) {
+            Cesium3DTilesTester.expectRenderTileset(scene, tileset);
+        });
+    });
+
+    it('renders with feature defined quantized position and Oct16P encoded orientation', function() {
+        return Cesium3DTilesTester.loadTileset(scene, quantizedOct16POrientationUrl).then(function(tileset) {
             Cesium3DTilesTester.expectRenderTileset(scene, tileset);
         });
     });

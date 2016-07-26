@@ -277,7 +277,8 @@ define([
 
             if (gltfFormat === 0) {
                 var gltfUrl = getStringFromTypedArray(gltfView);
-                collectionOptions.url = joinUrls(this._tileset.baseUrl, gltfUrl);
+                var baseUrl = defaultValue(this._tileset.baseUrl, '');
+                collectionOptions.url = joinUrls(baseUrl, gltfUrl);
             } else {
                 collectionOptions.gltf = gltfView;
                 collectionOptions.basePath = this._url;
@@ -285,6 +286,7 @@ define([
 
             var instances = collectionOptions.instances;
             var instancePosition = new Cartesian3();
+            var instancePositionArray = new Array(3);
             var instanceNormalRight = new Cartesian3();
             var instanceNormalUp = new Cartesian3();
             var instanceNormalForward = new Cartesian3();
@@ -297,7 +299,8 @@ define([
                 // Get the instance position
                 var position = featureTableResources.getProperty('POSITION', i, WebGLConstants.FLOAT, 3);
                 if (!defined(position)) {
-                    var positionQuantized = featureTableResources.getProperty('POSITION_QUANTIZED', i, WebGLConstants.UNSIGNED_SHORT);
+                    position = instancePositionArray;
+                    var positionQuantized = featureTableResources.getProperty('POSITION_QUANTIZED', i, WebGLConstants.UNSIGNED_SHORT, 3);
                     //>>includeStart('debug', pragmas.debug);
                     if (!defined(positionQuantized)) {
                         throw new DeveloperError('Either POSITION or POSITION_QUANTIZED must be defined for each instance.');
@@ -312,7 +315,7 @@ define([
                         throw new DeveloperError('Global property: QUANTIZED_VOLUME_SCALE must be defined for quantized positions.');
                     }
                     for (var j = 0; j < 3; j++) {
-                        position[j] = positionQuantized[j] / 65535.0 * quantizedVolumeScale[j] + quantizedVolumeOffset[j];
+                        position[j] = (positionQuantized[j] / 65535.0 * quantizedVolumeScale[j]) + quantizedVolumeOffset[j];
                     }
                 }
                 Cartesian3.unpack(position, 0, instancePosition);
@@ -332,17 +335,16 @@ define([
                     Cartesian3.unpack(normalRight, 0, instanceNormalRight);
                     hasCustomOrientation = true;
                 } else {
-                    var octNormalUp = featureTableResources.getProperty('NORMAL_UP_OCT32P', WebGLConstants.UNSIGNED_SHORT, 2);
-                    var octNormalRight = featureTableResources.getProperty('NORMAL_RIGHT_OCT32P', WebGLConstants.UNSIGNED_SHORT, 2);
+                    var octNormalUp = featureTableResources.getProperty('NORMAL_UP_OCT32P', i, WebGLConstants.UNSIGNED_SHORT, 2);
+                    var octNormalRight = featureTableResources.getProperty('NORMAL_RIGHT_OCT32P', i, WebGLConstants.UNSIGNED_SHORT, 2);
                     if (defined(octNormalUp)) {
                         //>>includeStart('debug', pragmas.debug);
                         if (!defined(octNormalRight)) {
                             throw new DeveloperError('To define a custom orientation with oct-encoded vectors, both NORMAL_UP_OCT32P and NORMAL_RIGHT_OCT32P must be defined.');
                         }
                         //>>includeEnd('debug');
-                        // TODO: This currently targets OCT16P encoding, it's just here for show until my Cesium PR for other precisions gets pulled in
-                        AttributeCompression.octDecode(octNormalUp[0], octNormalUp[1], instanceNormalUp);
-                        AttributeCompression.octDecode(octNormalRight[0], octNormalRight[1], instanceNormalRight);
+                        AttributeCompression.octDecodeInRange(octNormalUp[0], octNormalUp[1], 65535, instanceNormalUp);
+                        AttributeCompression.octDecodeInRange(octNormalRight[0], octNormalRight[1], 65535, instanceNormalRight);
                         hasCustomOrientation = true;
                     } else {
                         // Custom orientation is not defined, default to WGS84

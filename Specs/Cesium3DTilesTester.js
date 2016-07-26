@@ -199,56 +199,47 @@ define([
         options = defaultValue(options, defaultValue.EMPTY_OBJECT);
         var magic = defaultValue(options.magic, [105, 51, 100, 109]);
         var version = defaultValue(options.version, 1);
+
         var gltfFormat = defaultValue(options.gltfFormat, 1);
         var gltfUri = defaultValue(options.gltfUri, '');
-        var featuresLength = defaultValue(options.featuresLength, 1);
+        var gltfUriByteLength = gltfUri.length;
 
-        var headerByteLength = 76;
-        var instancesByteLength = featuresLength * 10;
+        var featuresLength = defaultValue(options.featuresLength, 1);
+        var featureTableJSON = {
+            INSTANCES_LENGTH : featuresLength,
+            POSITION : new Array(featuresLength * 3).fill(0)
+        };
+        var featureTableJSONString = JSON.stringify(featureTableJSON);
+        var featureTableJSONByteLength = featureTableJSONString.length;
+
+        var headerByteLength = 36;
         var uriByteLength = gltfUri.length;
-        var byteLength = headerByteLength + uriByteLength + instancesByteLength;
+        var byteLength = headerByteLength + featureTableJSONByteLength + uriByteLength;
         var buffer = new ArrayBuffer(byteLength);
         var view = new DataView(buffer);
         view.setUint8(0, magic[0]);
         view.setUint8(1, magic[1]);
         view.setUint8(2, magic[2]);
         view.setUint8(3, magic[3]);
-        view.setUint32(4, version, true);               // version
-        view.setUint32(8, byteLength, true);            // byteLength
-        view.setUint32(12, 0, true);                    // batchTableByteLength
-        view.setUint32(16, uriByteLength, true);       // gltfByteLength
-        view.setUint32(20, gltfFormat, true);           // gltfFormat
-        view.setUint32(24, featuresLength, true);       // featuresLength
-        view.setFloat64(28, 0.0, true);                 // translate x
-        view.setFloat64(36, 0.0, true);                 // translate y
-        view.setFloat64(44, 0.0, true);                 // translate z
-        view.setFloat64(52, 0.0, true);                 // scale x
-        view.setFloat64(60, 0.0, true);                 // scale y
-        view.setFloat64(68, 0.0, true);                 // scale z
+        view.setUint32(4, version, true);                        // version
+        view.setUint32(8, byteLength, true);                     // byteLength
+        view.setUint32(12, featureTableJSONByteLength, true);    // featureTableJSONByteLength
+        view.setUint32(16, 0, true);                             // featureTableBinaryByteLength
+        view.setUint32(20, 0, true);                             // batchTableJSONByteLength
+        view.setUint32(24, 0, true);                             // batchTableBinaryByteLength
+        view.setUint32(28, gltfUriByteLength, true);             // gltfByteLength
+        view.setUint32(36, gltfFormat, true);                    // gltfFormat
 
+        var i;
         var byteOffset = headerByteLength;
-        for (var i = 0; i < gltfUri.length; i++) {
+        for (i = 0; i < featureTableJSONByteLength; i++) {
+            view.setUint8(byteOffset, featureTableJSONString.charCodeAt(i));
+            byteOffset++;
+        }
+        for (i = 0; i < gltfUriByteLength; i++) {
             view.setUint8(byteOffset, gltfUri.charCodeAt(i));
             byteOffset++;
         }
-
-        for (var j = 0; j < featuresLength; ++j) {
-            view.setUint16(byteOffset, 0.0, true);      // x
-            byteOffset += 2;
-            view.setUint16(byteOffset, 0.0, true);      // y
-            byteOffset += 2;
-            view.setUint16(byteOffset, 0.0, true);      // z
-            byteOffset += 2;
-            view.setUint8(byteOffset, 0.0);             // oct-encoded normal 1.x
-            byteOffset ++;
-            view.setUint8(byteOffset, 0.0);             // oct-encoded normal 1.y
-            byteOffset ++;
-            view.setUint8(byteOffset, 0.0);             // oct-encoded normal 2.x
-            byteOffset ++;
-            view.setUint8(byteOffset, 0.0);             // oct-encoded normal 2.y
-            byteOffset ++;
-        }
-
         return buffer;
     };
 
