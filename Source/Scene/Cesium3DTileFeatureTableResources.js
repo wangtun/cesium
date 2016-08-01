@@ -75,7 +75,7 @@ define([
                 return subArray;
             }
         }
-        return jsonValue;
+        return jsonValue.slice(featureId * featureSize, featureId * featureSize + featureSize);
     };
 
     return Cesium3DTileFeatureTableResources;

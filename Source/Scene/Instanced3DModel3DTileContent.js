@@ -307,13 +307,17 @@ define([
                     }
                     //>>includeEnd('debug');
                     var quantizedVolumeOffset = featureTableResources.getGlobalProperty('QUANTIZED_VOLUME_OFFSET', WebGLConstants.FLOAT, 3);
+                    //>>includeStart('debug', pragmas.debug);
                     if (!defined(quantizedVolumeOffset)) {
                         throw new DeveloperError('Global property: QUANTIZED_VOLUME_OFFSET must be defined for quantized positions.');
                     }
+                    //>>includeEnd('debug');
                     var quantizedVolumeScale = featureTableResources.getGlobalProperty('QUANTIZED_VOLUME_SCALE', WebGLConstants.FLOAT, 3);
+                    //>>includeStart('debug', pragmas.debug);
                     if (!defined(quantizedVolumeScale)) {
                         throw new DeveloperError('Global property: QUANTIZED_VOLUME_SCALE must be defined for quantized positions.');
                     }
+                    //>>includeEnd('debug');
                     for (var j = 0; j < 3; j++) {
                         position[j] = (positionQuantized[j] / 65535.0 * quantizedVolumeScale[j]) + quantizedVolumeOffset[j];
                     }
