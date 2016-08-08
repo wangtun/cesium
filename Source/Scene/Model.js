@@ -2540,7 +2540,7 @@ define([
         },
         MODELINVERSETRANSPOSE : function(uniformState, model) {
             return function() {
-                return uniformState.inverseTranposeModel;
+                return uniformState.inverseTransposeModel;
             };
         },
         MODELVIEWINVERSETRANSPOSE : function(uniformState, model) {
