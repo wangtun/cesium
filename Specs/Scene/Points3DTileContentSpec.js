@@ -66,12 +66,6 @@ defineSuite([
         return Cesium3DTilesTester.loadTileExpectError(scene, arrayBuffer, 'pnts');
     });
 
-    it('throws with no points', function() {
-        // Throws in Buffer due to vertex buffer size of zero
-        var arrayBuffer = Cesium3DTilesTester.generatePointsTileBuffer();
-        return Cesium3DTilesTester.loadTileExpectError(scene, arrayBuffer, 'pnts');
-    });
-
     it('resolves readyPromise', function() {
         return Cesium3DTilesTester.resolvesReadyPromise(scene, pointsRGBUrl);
     });

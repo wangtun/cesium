@@ -42,19 +42,18 @@ define([
         return arrayBuffer;
     };
 
-    Cesium3DTileFeatureTableResources.prototype.getGlobalProperty = function(semantic, componentType, count) {
+    Cesium3DTileFeatureTableResources.prototype.getGlobalProperty = function(semantic, componentType, count, featureSize) {
         var jsonValue = this.json[semantic];
         if (defined(jsonValue)) {
             var byteOffset = jsonValue.byteOffset;
             if (defined(byteOffset)) {
                 // This is a reference to the binary
                 count = defaultValue(count, 1);
-                var typedArray = this.getTypedArrayForSemantic(semantic, byteOffset, componentType, count);
-                var subArray = typedArray.subarray(0, count);
+                var typedArray = this.getTypedArrayForSemantic(semantic, byteOffset, componentType, count, featureSize);
                 if (count === 1) {
-                    return subArray[0];
+                    return typedArray[0];
                 }
-                return subArray;
+                return typedArray;
             }
         }
         return jsonValue;
