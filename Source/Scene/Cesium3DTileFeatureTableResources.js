@@ -50,10 +50,11 @@ define([
                 // This is a reference to the binary
                 count = defaultValue(count, 1);
                 var typedArray = this.getTypedArrayForSemantic(semantic, byteOffset, componentType, count, featureSize);
+                var subArray = typedArray.subarray(0, count);
                 if (count === 1) {
-                    return typedArray[0];
+                    return subArray[0];
                 }
-                return typedArray;
+                return subArray;
             }
         }
         return jsonValue;
