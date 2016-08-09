@@ -96,6 +96,8 @@ define([
         this.computedTransform = Matrix4.multiply(parentTransform, this.transform, new Matrix4());
         this._computedTransform = Matrix4.clone(this.computedTransform);
 
+        this._transformDirty = true;
+
         this._boundingVolume = this.createBoundingVolume(header.boundingVolume, this.computedTransform);
 
         var contentBoundingVolume;
@@ -362,6 +364,20 @@ define([
         },
 
         /**
+         * Whether the computedTransform has changed this frame.
+         *
+         * @memberof Cesium3DTile.prototype
+         *
+         * @type {Boolean}
+         * @readonly
+         */
+        transformDirty : {
+            get : function() {
+                return this._transformDirty;
+            }
+        },
+
+        /**
          * @readonly
          * @private
          */
@@ -613,8 +629,8 @@ define([
     }
 
     function updateTransform(tile) {
-        var transformChanged = !Matrix4.equals(tile.computedTransform, tile._computedTransform);
-        if (transformChanged) {
+        var transformDirty = !Matrix4.equals(tile.computedTransform, tile._computedTransform);
+        if (transformDirty) {
             Matrix4.clone(tile.computedTransform, tile._computedTransform);
 
             // Update the bounding volumes
@@ -629,6 +645,7 @@ define([
             tile._debugBoundingVolume = tile._debugBoundingVolume && tile._debugBoundingVolume.destroy();
             tile._debugContentBoundingVolume = tile._debugContentBoundingVolume && tile._debugContentBoundingVolume.destroy();
         }
+        tile._transformDirty = transformDirty;
     }
 
     /**

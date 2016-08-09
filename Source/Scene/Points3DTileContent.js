@@ -78,15 +78,16 @@ define([
         this._tileset = tileset;
         this._tile = tile;
 
-        // Hold onto the feature table until the render resources are created
-        this._featureTableResources = undefined;
-        this._drawCommand = undefined;
+        // Hold onto the payload until the render resources are created
+        this._parsedContent = undefined;
 
+        this._drawCommand = undefined;
         this._isTranslucent = false;
+        this._constantColor = Color.clone(Color.WHITE);
+        this._rtcCenter = undefined;
+
         this._opaqueRenderState = undefined;
         this._translucentRenderState = undefined;
-
-        this._constantColor = Color.clone(Color.WHITE);
 
         // Uniforms
         this._highlightColor = this._constantColor;
@@ -214,16 +215,7 @@ define([
         var featureTableBinary = new Uint8Array(arrayBuffer, byteOffset, featureTableBinaryByteLength);
         byteOffset += featureTableBinaryByteLength;
 
-        this._featureTableResources = new Cesium3DTileFeatureTableResources(featureTableJSON, featureTableBinary);
-
-        this.state = Cesium3DTileContentState.PROCESSING;
-        this.contentReadyToProcessPromise.resolve(this);
-    };
-
-    function createResources(content, frameState) {
-        var context = frameState.context;
-        var featureTableResources = content._featureTableResources;
-        var featureTableJSON = featureTableResources.json;
+        var featureTableResources = new Cesium3DTileFeatureTableResources(featureTableJSON, featureTableBinary);
 
         var pointsLength = featureTableResources.getGlobalProperty('POINTS_LENGTH');
         featureTableResources.featuresLength = pointsLength;
@@ -240,16 +232,29 @@ define([
 
         if (defined(featureTableJSON.POSITION)) {
             positions = featureTableResources.getGlobalProperty('POSITION', ComponentDatatype.FLOAT, pointsLength, 3);
+            var rtcCenter = featureTableResources.getGlobalProperty('RTC_CENTER');
+            if (defined(rtcCenter)) {
+                this._rtcCenter = Cartesian3.unpack(rtcCenter);
+            }
         } else if (defined(featureTableJSON.POSITION_QUANTIZED)) {
             positions = featureTableResources.getGlobalProperty('POSITION_QUANTIZED', ComponentDatatype.UNSIGNED_SHORT, pointsLength, 3);
             isQuantized = true;
+
             var quantizedVolumeScale = featureTableResources.getGlobalProperty('QUANTIZED_VOLUME_SCALE');
-            content._quantizedVolumeScale = Cartesian3.unpack(quantizedVolumeScale);
             //>>includeStart('debug', pragmas.debug);
-            if (!defined(content._quantizedVolumeScale)) {
+            if (!defined(quantizedVolumeScale)) {
                 throw new DeveloperError('Global property: QUANTIZED_VOLUME_SCALE must be defined for quantized positions.');
             }
             //>>includeEnd('debug');
+            this._quantizedVolumeScale = Cartesian3.unpack(quantizedVolumeScale);
+
+            var quantizedVolumeOffset = featureTableResources.getGlobalProperty('QUANTIZED_VOLUME_OFFSET');
+            //>>includeStart('debug', pragmas.debug);
+            if (!defined(quantizedVolumeOffset)) {
+                throw new DeveloperError('Global property: QUANTIZED_VOLUME_OFFSET must be defined for quantized positions.');
+            }
+            //>>includeEnd('debug');
+            this._rtcCenter = Cartesian3.unpack(quantizedVolumeOffset);
         }
 
         //>>includeStart('debug', pragmas.debug);
@@ -261,20 +266,21 @@ define([
         // Get the colors
         var colors;
         var isTranslucent = false;
-        var isConstantColor = false;
 
         if (defined(featureTableJSON.RGBA)) {
             colors = featureTableResources.getGlobalProperty('RGBA', ComponentDatatype.UNSIGNED_BYTE, pointsLength, 4);
             isTranslucent = true;
         } else if (defined(featureTableJSON.RGB)) {
             colors = featureTableResources.getGlobalProperty('RGB', ComponentDatatype.UNSIGNED_BYTE, pointsLength, 3);
-        } else if (defined(featureTableJSON.CONSTANT_COLOR)) {
-            var constantColor = featureTableResources.getGlobalProperty('CONSTANT_COLOR');
-            content._constantColor = Color.fromBytes(constantColor[0], constantColor[1], constantColor[2], constantColor[3], content._constantColor);
-            isConstantColor = true;
+        } else if (defined(featureTableJSON.CONSTANT_RGBA)) {
+            var constantRGBA  = featureTableResources.getGlobalProperty('CONSTANT_RGBA');
+            this._constantColor = Color.fromBytes(constantRGBA[0], constantRGBA[1], constantRGBA[2], constantRGBA[3], this._constantColor);
+        } else {
+            // Use a default constant color
+            this._constantColor = Color.clone(Color.DARKGRAY, this._constantColor);
         }
 
-        content._isTranslucent = isTranslucent;
+        this._isTranslucent = isTranslucent;
 
         // Get the normals
         var normals;
@@ -287,13 +293,32 @@ define([
             isOctEncoded16P = true;
         }
 
+        this._parsedContent = {
+            pointsLength : pointsLength,
+            positions : positions,
+            colors : colors,
+            normals : normals,
+            isQuantized : isQuantized,
+            isOctEncoded16P : isOctEncoded16P
+        };
+
+        this.state = Cesium3DTileContentState.PROCESSING;
+        this.contentReadyToProcessPromise.resolve(this);
+    };
+
+    function createResources(content, frameState) {
+        var context = frameState.context;
+        var parsedContent = content._parsedContent;
+        var pointsLength = parsedContent.pointsLength;
+        var positions = parsedContent.positions;
+        var colors = parsedContent.colors;
+        var normals = parsedContent.normals;
+        var isQuantized = parsedContent.isQuantized;
+        var isOctEncoded16P = parsedContent.isOctEncoded16P;
+        var isTranslucent = content._isTranslucent;
+
         var hasColors = defined(colors);
         var hasNormals = defined(normals);
-
-        if (!hasColors && !isConstantColor) {
-            // Use a default constant color
-            content._constantColor = Color.clone(Color.DARKGRAY, content._constantColor);
-        }
 
         var vs = 'attribute vec3 a_position; \n' +
                  'varying vec4 v_color; \n' +
@@ -340,7 +365,7 @@ define([
             }
 
             vs += '    normal = czm_normal * normal; \n' +
-                  '    color *= max(dot(normal, czm_sunDirectionEC), 0.0); \n';
+                  '    color *= czm_getLambertDiffuse(czm_sunDirectionEC, normal); \n';
         }
 
         if (isQuantized) {
@@ -521,10 +546,6 @@ define([
             pass : isTranslucent ? Pass.TRANSLUCENT : Pass.OPAQUE,
             owner : content
         });
-
-        content.state = Cesium3DTileContentState.READY;
-        content.readyPromise.resolve(content);
-        content._featureTableResources = undefined; // Unload
     }
 
     /**
@@ -534,21 +555,29 @@ define([
         this._highlightColor = enabled ? color : this._constantColor;
     };
 
-    var scratchMatrix = new Matrix3();
-
     /**
      * Part of the {@link Cesium3DTileContent} interface.
      */
     Points3DTileContent.prototype.update = function(tileset, frameState) {
+        var updateModelMatrix = this._tile.transformDirty;
+
         if (!defined(this._drawCommand)) {
             createResources(this, frameState);
+            updateModelMatrix = true;
+
+            // Set state to ready
+            this.state = Cesium3DTileContentState.READY;
+            this.readyPromise.resolve(this);
+            this._parsedContent = undefined; // Unload
         }
 
-        // Update the model matrix
-        var boundingSphere = this._tile.contentBoundingVolume.boundingSphere;
-        var translation = boundingSphere.center;
-        var rotation = Matrix4.getRotation(this._tile.computedTransform, scratchMatrix);
-        Matrix4.fromRotationTranslation(rotation, translation, this._drawCommand.modelMatrix);
+        if (updateModelMatrix) {
+            if (defined(this._rtcCenter)) {
+                Matrix4.multiplyByTranslation(this._tile.computedTransform, this._rtcCenter, this._drawCommand.modelMatrix);
+            } else {
+                Matrix4.clone(this._tile.computedTransform, this._drawCommand.modelMatrix);
+            }
+        }
 
         // Update the render state
         var isTranslucent = (this._highlightColor.alpha < 1.0) || this._isTranslucent;
