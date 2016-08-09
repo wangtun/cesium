@@ -1774,7 +1774,7 @@ define([
         }
         return undefined;
     }
-    
+
     function modifyShaderForQuantizedAttributes(shader, programName, model, context) {
         var quantizedUniforms = {};
         model._quantizedUniforms[programName] = quantizedUniforms;
