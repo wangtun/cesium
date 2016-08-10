@@ -365,7 +365,9 @@ define([
             }
 
             vs += '    normal = czm_normal * normal; \n' +
-                  '    color *= czm_getLambertDiffuse(czm_sunDirectionEC, normal); \n';
+                  '    float diffuseStrength = czm_getLambertDiffuse(czm_sunDirectionEC, normal); \n' +
+                  '    diffuseStrength = max(diffuseStrength, 0.4); \n' + // Apply some ambient lighting
+                  '    color *= diffuseStrength; \n';
         }
 
         if (isQuantized) {
